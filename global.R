@@ -22,6 +22,8 @@ source("GGgraphs.R")
 ### STUFF UNIQUE TO THIS DATASET ###
 options(dplyr.summarise.inform=F) 
 
+topNowners = 20
+
 ## Functions
 clean_ati <- function(dfr) {
   dfr %>%
@@ -33,10 +35,36 @@ clean_ati <- function(dfr) {
       ,umd_number = factor(umd_number)
       ,owner = sub("Department of ", "", owner)
       ,owner = sub(" Canada", "", owner)
+      ,owner = sub("(and)|(And)", "&", owner)
       ,owner = trimws(owner)
     ) %>%
     filter(year != "2020" | month != "Oct") %>%
     select(-summary_fr)
+}
+
+shorten_department_names <- function(depNames) {
+  depNames[grepl("Immigration, Ref", depNames)] = "IRCC"
+  depNames[grepl("Innovation, Sci", depNames)] = "ISED"
+  depNames[grepl("Public Services", depNames)] = "PSPC"
+  depNames[grepl("Employment & Social", depNames)] = "ESDC"
+  depNames[grepl("Privy Council", depNames)] = "PCO"
+  depNames[grepl("Border Services", depNames)] = "CBSA"
+  depNames[grepl("Revenue Agency", depNames)] = "CRA"
+  depNames[grepl("Mounted Police", depNames)] = "RCMP"
+  depNames[grepl("Treasury Board", depNames)] = "TBS"
+  depNames[grepl("Climate Change", depNames)] = "ECCC"
+  depNames[grepl("Food Inspection", depNames)] = "CFIA"
+  depNames[grepl("Nuclear Safety", depNames)] = "CNSC"
+  depNames[grepl("Transport Canada", depNames)] = "TC"
+  depNames[grepl("Fisheries", depNames)] = "DFO"
+  depNames[grepl("Library and Archives", depNames)] = "LAC"
+  depNames[grepl("National Defence", depNames)] = "DND"
+  depNames[grepl("Public Safety", depNames)] = "PS"
+  depNames[grepl("Finance Canada", depNames)] = "FIN"
+  depNames[grepl("Natural Resources", depNames)] = "NRCan"
+  depNames[grepl("Justice", depNames)] = "JUS"
+  depNames[grepl("Canadian Heritage", depNames)] = "PCH"
+  depNames
 }
 
 count_unigrams <- function(dataset, stopWords) {
@@ -107,20 +135,21 @@ visualize_tfidf <- function(tfidf, topN = 10) {
     arrange(desc(tf_idf)) %>%
     mutate(word = factor(word, levels = rev(unique(word)))) %>% 
     group_by(owner) %>%
-    top_n(topN, tf_idf) %>% 
+    # top_n(topN, tf_idf) %>%
+    slice_max(tf_idf, n = topN, with_ties = FALSE) %>% 
     ggplot(aes(x=word, y=tf_idf, fill = owner)) +
     geom_col(show.legend = FALSE) +
     labs(x = NULL, y = "TF-IDF") +
     facet_wrap(~owner, scales = "free") +
     coord_flip() +
-    theme(axis.text = element_text(size = 12))
+    theme(axis.text = element_text(size = 12 - ceiling(2*(sqrt(topNowners) - 3)) )) # Adjustment for sizing
 }
 
 
 ## Variables
-ati = read_csv("ati.csv") %>% clean_ati()
-ownersTop9 = ati %>% group_by(owner) %>% count() %>% ungroup() %>% top_n(9, n) %>% pull(owner)
-ati_top9 = ati %>% filter(owner %in% ownersTop9)
+ati = read_csv("ati.csv") %>% clean_ati() %>% mutate(owner = shorten_department_names(owner))
+ownersTopN = ati %>% group_by(owner) %>% count() %>% ungroup() %>% top_n(topNowners, n) %>% pull(owner)
+ati_topN = ati %>% filter(owner %in% ownersTopN)
 custWords = read_csv("stop_words_custom.csv") %>% pull(word)
 
 ### GENERAL ###
